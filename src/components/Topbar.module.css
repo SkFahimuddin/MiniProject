@@ -141,3 +141,27 @@
   color: var(--red);
   border-color: var(--red);
 }
+
+.adminBtn {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background 0.15s;
+}
+.adminBtn:hover { background: rgba(255,255,255,0.25); }
+.adminBtnActive {
+  background: rgba(255,255,255,0.9);
+  color: #1a56db;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-weight: 700;
+}

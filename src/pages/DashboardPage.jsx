@@ -1,10 +1,12 @@
 import Topbar   from '../components/Topbar.jsx'
 import BedCard  from '../components/BedCard.jsx'
 import { useSensor } from '../context/SensorContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import styles from './DashboardPage.module.css'
 
 export default function DashboardPage() {
   const { beds, stats, lastUpdate } = useSensor()
+  const { user } = useAuth()
 
   const now = new Date().toLocaleString('en-IN', {
     weekday: 'short', day: 'numeric', month: 'short',
@@ -14,9 +16,7 @@ export default function DashboardPage() {
   return (
     <div className={styles.page}>
       <Topbar />
-
       <main className={styles.main}>
-        {/* Header */}
         <div className={styles.header}>
           <div>
             <h1 className={styles.title}>Ward Dashboard</h1>
@@ -24,7 +24,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Stats row */}
         <div className={styles.statsRow}>
           <StatCard label="Total Beds"     value={stats.total}       color="default" />
           <StatCard label="Active IVs"     value={stats.activeIVs}   color="green" />
@@ -32,7 +31,6 @@ export default function DashboardPage() {
           <StatCard label="Blood Backflow" value={stats.bloodAlerts} color={stats.bloodAlerts > 0 ? 'red'   : 'green'} />
         </div>
 
-        {/* Active alerts banner */}
         {(stats.irAlerts > 0 || stats.bloodAlerts > 0) && (
           <div className={styles.alertBanner}>
             <span className={styles.alertBannerDot} />
@@ -44,13 +42,19 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Beds grid */}
         <div className={styles.sectionTitle}>Bed Status</div>
-        <div className={styles.grid}>
-          {beds.map(bed => (
-            <BedCard key={bed.id} bed={bed} />
-          ))}
-        </div>
+
+        {beds.length === 0 ? (
+          <div className={styles.noBeds}>
+            {user?.role === 'admin'
+              ? 'No beds configured yet. Go to ⚙ Admin to add beds and assign ESPs.'
+              : 'No beds configured. Please contact the admin.'}
+          </div>
+        ) : (
+          <div className={styles.grid}>
+            {beds.map(bed => <BedCard key={bed._id} bed={bed} />)}
+          </div>
+        )}
 
         {lastUpdate && (
           <div className={styles.lastUpdate}>

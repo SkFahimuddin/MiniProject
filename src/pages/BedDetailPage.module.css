@@ -255,3 +255,18 @@
   text-align: center;
 }
 .notFound h2 { margin-bottom: 16px; color: var(--text2); }
+
+.espInfo {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+.espInfo code {
+  background: #f3f4f6;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #374151;
+}

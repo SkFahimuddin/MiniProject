@@ -15,21 +15,21 @@ export default function BedCard({ bed }) {
   return (
     <div
       className={`${styles.card} ${styles[status]}`}
-      onClick={() => navigate(`/bed/${bed.id}`)}
+      onClick={() => navigate(`/bed/${bed.bedId}`)}
     >
       <div className={styles.top}>
-        <span className={styles.bedId}>{bed.id}</span>
+        <span className={styles.bedId}>{bed.bedId}</span>
         <StatusPill status={status} />
       </div>
 
       <div className={styles.patientName}>
-        {bed.patient ?? 'Vacant'}
+        {bed.patientName || 'Vacant'}
       </div>
 
       {bed.ivActive ? (
         <>
           <div className={styles.meta}>
-            {bed.doctor} &middot; {bed.diagnosis}
+            {bed.doctorName || '—'} &middot; {bed.diagnosis || '—'}
           </div>
           <div className={styles.sensors}>
             <SensorChip label="IR" value={bed.ir} />
@@ -55,21 +55,9 @@ function StatusPill({ status }) {
 }
 
 function SensorChip({ label, value }) {
-  const cls = value === 'crit' ? styles.chipCrit
-            : value === 'warn' ? styles.chipWarn
-            : value === 'off'  ? styles.chipOff
-            :                    styles.chipOk
-
-  const dot = value === 'crit' ? styles.dotCrit
-            : value === 'warn' ? styles.dotWarn
-            : value === 'off'  ? styles.dotOff
-            :                    styles.dotOk
-
-  const txt = value === 'crit' ? `${label}: ALERT`
-            : value === 'warn' ? `${label}: Irregular`
-            : value === 'off'  ? `${label}: Off`
-            :                    `${label}: Normal`
-
+  const cls = value === 'crit' ? styles.chipCrit : value === 'warn' ? styles.chipWarn : value === 'off' ? styles.chipOff : styles.chipOk
+  const dot = value === 'crit' ? styles.dotCrit  : value === 'warn' ? styles.dotWarn  : value === 'off' ? styles.dotOff  : styles.dotOk
+  const txt = value === 'crit' ? `${label}: ALERT` : value === 'warn' ? `${label}: Irregular` : value === 'off' ? `${label}: Off` : `${label}: Normal`
   return (
     <div className={`${styles.chip} ${cls}`}>
       <span className={`${styles.dot} ${dot}`} />

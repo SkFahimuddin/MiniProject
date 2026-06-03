@@ -1,26 +1,24 @@
 import { useAuth } from '../context/AuthContext.jsx'
 import { useSensor } from '../context/SensorContext.jsx'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import styles from './Topbar.module.css'
 
 export default function Topbar() {
-  const { user, logout } = useAuth()
+  const { user, logout }   = useAuth()
   const { stats, connected } = useSensor()
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const location  = useLocation()
   const totalAlerts = stats.irAlerts + stats.bloodAlerts
 
-  function handleLogout() {
-    logout()
-    navigate('/login', { replace: true })
-  }
+  function handleLogout() { logout(); navigate('/login', { replace: true }) }
+
+  const isAdmin = location.pathname === '/admin'
 
   return (
     <header className={styles.bar}>
       <div className={styles.left}>
         <div className={styles.logo} onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-          <div className={styles.logoIcon}>
-            <CrossIcon />
-          </div>
+          <div className={styles.logoIcon}><CrossIcon /></div>
           <span className={styles.logoText}>SalineWatch</span>
         </div>
         <div className={styles.divider} />
@@ -28,25 +26,27 @@ export default function Topbar() {
       </div>
 
       <div className={styles.right}>
-        {/* Live connection badge */}
         <div className={connected ? styles.liveOn : styles.liveOff}>
           <span className={connected ? styles.dotOn : styles.dotOff} />
-          {connected ? 'Live' : 'Demo mode'}
+          {connected ? 'Live' : 'Connecting…'}
         </div>
 
-        {/* Alert count */}
         {totalAlerts > 0 && (
-          <div className={styles.alertBadge}>
-            {totalAlerts} alert{totalAlerts > 1 ? 's' : ''}
-          </div>
+          <div className={styles.alertBadge}>{totalAlerts} alert{totalAlerts > 1 ? 's' : ''}</div>
+        )}
+
+        {user?.role === 'admin' && (
+          <button
+            className={isAdmin ? styles.adminBtnActive : styles.adminBtn}
+            onClick={() => navigate(isAdmin ? '/' : '/admin')}
+          >
+            {isAdmin ? '← Dashboard' : '⚙ Admin'}
+          </button>
         )}
 
         <span className={styles.userName}>{user?.name}</span>
         <span className={styles.userRole}>{user?.role}</span>
-
-        <button className={styles.logoutBtn} onClick={handleLogout}>
-          Logout
-        </button>
+        <button className={styles.logoutBtn} onClick={handleLogout}>Logout</button>
       </div>
     </header>
   )
