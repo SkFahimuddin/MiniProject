@@ -1,74 +1,61 @@
 /**
  * SalineWatch — ESP8266 Firmware #2
- * Colour Sensor (Saline Pipe) — TCS3200 or TCS34725
- *
- * WIRING (TCS3200):
- *   S0 → D5 (GPIO14)   — frequency scaling
- *   S1 → D6 (GPIO12)   — frequency scaling
- *   S2 → D7 (GPIO13)   — colour filter select
- *   S3 → D8 (GPIO15)   — colour filter select
- *   OUT → D4 (GPIO2)   — frequency output
+ * Colour Sensor (Saline Pipe) — TCS34725
+ * 
+ * WIRING (TCS34725):
+ *   SDA → D2 (GPIO4)
+ *   SCL → D1 (GPIO5)
  *   VCC → 3.3V
  *   GND → GND
- *   OE  → GND (always enabled)
- *
- * HOW IT DETECTS RED:
- *   TCS3200 outputs a frequency — higher frequency = more of that colour.
- *   We read R, G, B frequencies separately, then check if RED is dominant.
- *   If red > green*1.6 AND red > blue*1.6 → blood backflow detected.
- *
- * SETUP:
- *   Same Arduino IDE + ESP8266 board setup as ir_sensor.
- *   Set BED_ID to match the bed this ESP is installed in.
+ *   LED → 3.3V (keep LED on for consistent readings)
+ * 
+ * LIBRARY:
+ *   Install "Adafruit TCS34725" from Arduino Library Manager
  */
 
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
+#include <Wire.h>
+#include "Adafruit_TCS34725.h"
 
 // ── CONFIGURE THESE ────────────────────────────────────────────────────────
 const char* WIFI_SSID     = "YOUR_WIFI_NAME";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-const char* SERVER_URL    = "http://YOUR_RENDER_URL.onrender.com/api/sensor";
-const char* BED_ID        = "B-103";  // Change to the bed this ESP is in
+const char* SERVER_URL    = "http://YOUR_SERVER_IP:3001/api/sensor";
+const char* BED_ID        = "B-101";
 // ──────────────────────────────────────────────────────────────────────────
 
-// TCS3200 pins
-const int S0_PIN  = D5;
-const int S1_PIN  = D6;
-const int S2_PIN  = D7;
-const int S3_PIN  = D8;
-const int OUT_PIN = D4;
+// TCS34725 — integration time & gain (tune if needed)
+Adafruit_TCS34725 tcs = Adafruit_TCS34725(
+  TCS34725_INTEGRATIONTIME_50MS,
+  TCS34725_GAIN_4X
+);
 
-// Thresholds — tune these after calibration with your sensor
-const float RED_RATIO_THRESHOLD = 1.6;  // red must be 1.6x stronger than green/blue
-const int   READ_SAMPLES        = 5;    // average this many readings
-const int   CHECK_INTERVAL      = 1000; // check every 1 second
-const int   CONFIRM_COUNT       = 3;    // confirm 3 times before alerting
+const int   CHECK_INTERVAL = 1000; // ms between readings
+const int   CONFIRM_COUNT  = 3;    // consecutive reads before alert
 
-String        lastSentValue  = "";
-int           redCount       = 0;
-int           clearCount     = 0;
-unsigned long lastCheck      = 0;
+String        lastSentValue = "";
+int           redCount      = 0;
+int           clearCount    = 0;
+unsigned long lastCheck     = 0;
 
 void setup() {
   Serial.begin(115200);
+  Wire.begin(D2, D1); // SDA, SCL
 
-  pinMode(S0_PIN,  OUTPUT);
-  pinMode(S1_PIN,  OUTPUT);
-  pinMode(S2_PIN,  OUTPUT);
-  pinMode(S3_PIN,  OUTPUT);
-  pinMode(OUT_PIN, INPUT);
-
-  // Set TCS3200 frequency scaling to 20%
-  digitalWrite(S0_PIN, HIGH);
-  digitalWrite(S1_PIN, LOW);
-
-  Serial.println("\n[SalineWatch] Colour Sensor Node starting...");
+  Serial.println("\n[SalineWatch] Colour Sensor (TCS34725) starting...");
   Serial.print("[SalineWatch] Bed ID: ");
   Serial.println(BED_ID);
 
+  if (!tcs.begin()) {
+    Serial.println("[SalineWatch] ERROR: TCS34725 not found! Check wiring.");
+    while (1); // halt
+  }
+  Serial.println("[SalineWatch] TCS34725 found!");
+
   connectWiFi();
+
   Serial.println("[SalineWatch] Calibrating... hold sensor over clear saline for 3 seconds.");
   delay(3000);
   Serial.println("[SalineWatch] Ready!");
@@ -83,32 +70,32 @@ void loop() {
   if (millis() - lastCheck < CHECK_INTERVAL) return;
   lastCheck = millis();
 
-  // Read all three colour frequencies
-  long redFreq   = readColour(LOW,  LOW);   // S2=LOW,  S3=LOW  → Red filter
-  long greenFreq = readColour(HIGH, HIGH);  // S2=HIGH, S3=HIGH → Green filter
-  long blueFreq  = readColour(LOW,  HIGH);  // S2=LOW,  S3=HIGH → Blue filter
+  uint16_t r, g, b, c;
+  tcs.getRawData(&r, &g, &b, &c);
+
+  // Avoid divide by zero
+  if (c == 0) {
+    Serial.println("[SalineWatch] Clear channel = 0, skipping.");
+    return;
+  }
+
+  // Normalise to 0.0–1.0
+  float rNorm = (float)r / c;
+  float gNorm = (float)g / c;
+  float bNorm = (float)b / c;
 
   Serial.print("[SalineWatch] R:");
-  Serial.print(redFreq);
+  Serial.print(rNorm, 3);
   Serial.print(" G:");
-  Serial.print(greenFreq);
+  Serial.print(gNorm, 3);
   Serial.print(" B:");
-  Serial.println(blueFreq);
+  Serial.print(bNorm, 3);
+  Serial.print(" | Raw C:");
+  Serial.println(c);
 
-  // Detect red dominance (blood backflow)
-  bool redDetected = false;
-  if (greenFreq > 0 && blueFreq > 0) {
-    float rg = (float)redFreq / greenFreq;
-    float rb = (float)redFreq / blueFreq;
-
-    // Note: TCS3200 outputs LOWER frequency for MORE of that colour
-    // So if red is dominant, redFreq will be LOWER than green and blue
-    // Uncomment below if your sensor behaves this way:
-    // redDetected = (rg < (1.0 / RED_RATIO_THRESHOLD)) && (rb < (1.0 / RED_RATIO_THRESHOLD));
-
-    // If your sensor outputs HIGHER frequency for MORE colour (e.g. TCS34725):
-    redDetected = (rg > RED_RATIO_THRESHOLD) && (rb > RED_RATIO_THRESHOLD);
-  }
+  // Blood backflow detection:
+  // Red channel dominates when blood enters the saline line
+  bool redDetected = (rNorm > 0.45) && (rNorm > gNorm * 1.4) && (rNorm > bNorm * 1.4);
 
   if (redDetected) {
     redCount++;
@@ -132,20 +119,6 @@ void loop() {
     lastSentValue = "normal";
     clearCount = 0;
   }
-}
-
-// Read frequency from TCS3200 for given filter (S2, S3 settings)
-long readColour(int s2, int s3) {
-  digitalWrite(S2_PIN, s2);
-  digitalWrite(S3_PIN, s3);
-  delay(10);
-
-  long total = 0;
-  for (int i = 0; i < READ_SAMPLES; i++) {
-    total += pulseIn(OUT_PIN, LOW, 100000);
-    delay(5);
-  }
-  return total / READ_SAMPLES;
 }
 
 void sendSensorData(String value) {
@@ -192,7 +165,7 @@ void connectWiFi() {
     Serial.print("[SalineWatch] IP: ");
     Serial.println(WiFi.localIP());
   } else {
-    Serial.println("\n[SalineWatch] WiFi failed. Retrying...");
+    Serial.println("\n[SalineWatch] WiFi failed. Retrying in 5s...");
     delay(5000);
   }
 }
